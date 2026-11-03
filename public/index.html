@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>BIN Check</title>
+    <link rel="icon" href="favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="styles.css" />
+    <script src="app.js" type="module"></script>
+  </head>
+  <body>
+    <div class="ambient" aria-hidden="true"></div>
+    <noscript><p class="noscript">此页面需要启用 JavaScript。</p></noscript>
+
+    <!-- Login -->
+    <div class="login" id="login-view" hidden>
+      <svg class="login-rosette" id="login-rosette" aria-hidden="true"></svg>
+      <main class="login-panel">
+        <div class="login-mark" aria-hidden="true">
+          <svg class="icon" viewBox="0 0 24 24">
+            <rect x="3" y="11" width="18" height="11" rx="2" />
+            <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+          </svg>
+        </div>
+        <h1 class="login-title">BIN Check</h1>
+        <p class="login-subtitle">输入访问密码后开始查询</p>
+        <form id="login-form" class="login-form" autocomplete="on">
+          <input
+            class="visually-hidden"
+            type="text"
+            name="username"
+            value="bincheck"
+            autocomplete="username"
+            tabindex="-1"
+            aria-hidden="true"
+            readonly
+          />
+          <label class="field-label" for="password">访问密码</label>
+          <div class="password-field" id="password-field">
+            <input
+              id="password"
+              name="password"
+              type="password"
+              autocomplete="current-password"
+              spellcheck="false"
+              autocapitalize="off"
+              required
+            />
+            <button class="password-toggle" id="password-toggle" type="button" aria-label="显示密码" aria-pressed="false">
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7Z" />
+                <circle cx="12" cy="12" r="3" />
+              </svg>
+            </button>
+          </div>
+          <p class="form-message" id="login-message" role="alert" hidden></p>
+          <button class="primary-button" id="login-submit" type="submit">
+            <span class="button-label">进入</span>
+            <span class="spinner" aria-hidden="true"></span>
+          </button>
+        </form>
+      </main>
+    </div>
+
+    <!-- App -->
+    <div class="app" id="app-view" hidden>
+      <header class="topbar">
+        <div class="brand">
+          <img src="favicon.svg" alt="" width="26" height="26" />
+          <span>BIN Check</span>
+        </div>
+        <div class="topbar-actions">
+          <div class="quota" id="quota" hidden>
+            <div class="quota-text">
+              <span class="quota-label">接口额度</span>
+              <span class="quota-count" id="quota-count"></span>
+            </div>
+            <div class="quota-meter" aria-hidden="true"><span id="quota-fill"></span></div>
+          </div>
+          <button class="ghost-button" id="logout" type="button">
+            <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+              <path d="m16 17 5-5-5-5" />
+              <path d="M21 12H9" />
+            </svg>
+            <span>退出</span>
+          </button>
+        </div>
+      </header>
+
+      <main class="workspace" id="workspace" data-state="idle">
+        <section class="stage" aria-label="查询">
+          <div class="intro">
+            <h1>这张卡来自哪里？</h1>
+            <p>输入卡号前 6–8 位，查看卡组织、发卡机构和发卡国家。</p>
+          </div>
+
+          <div class="card-scene" id="card-scene">
+            <div class="card-flip" id="card-flip">
+              <div class="card" id="card">
+                <svg class="card-guilloche" id="card-guilloche" aria-hidden="true"></svg>
+                <div class="card-sheen" aria-hidden="true"></div>
+                <div class="card-top">
+                  <span class="card-issuer" id="card-issuer">BIN CHECK</span>
+                  <span class="card-logo" id="card-logo"></span>
+                </div>
+                <svg class="card-chip" viewBox="0 0 50 38" aria-hidden="true">
+                  <rect x="0.5" y="0.5" width="49" height="37" rx="7" />
+                  <path d="M0 13h15a4 4 0 0 1 4 4v4a4 4 0 0 1-4 4H0M50 13H35a4 4 0 0 0-4 4v4a4 4 0 0 0 4 4h15M19 0v9a4 4 0 0 0 4 4h4a4 4 0 0 0 4-4V0M19 38v-9a4 4 0 0 1 4-4h4a4 4 0 0 1 4 4v9" />
+                </svg>
+                <div class="card-number" id="card-number">•••• •••• •••• ••••</div>
+                <div class="card-bottom">
+                  <div class="card-meta">
+                    <small>类型</small>
+                    <span id="card-kind">—</span>
+                  </div>
+                  <div class="card-meta card-meta-end">
+                    <small>发卡地</small>
+                    <span id="card-region">—</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <form class="search" id="search-form" novalidate>
+            <label class="field-label" for="bin-input">卡 BIN</label>
+            <div class="search-row">
+              <input
+                id="bin-input"
+                type="text"
+                inputmode="numeric"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="448590"
+                aria-describedby="search-hint"
+              />
+              <span class="search-scheme" id="search-scheme" data-scheme="" hidden></span>
+              <button class="primary-button" id="search-submit" type="submit">
+                <span class="button-label">
+                  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <circle cx="11" cy="11" r="8" />
+                    <path d="m21 21-4.3-4.3" />
+                  </svg>
+                  查询
+                </span>
+                <span class="spinner" aria-hidden="true"></span>
+              </button>
+            </div>
+            <p class="search-hint" id="search-hint" aria-live="polite">粘贴完整卡号时，只会保留前 8 位。</p>
+            <p class="form-message" id="search-message" role="alert" hidden></p>
+          </form>
+        </section>
+
+        <section class="results" id="results" aria-live="polite" hidden>
+          <article class="panel overview">
+            <header class="overview-head">
+              <div>
+                <span class="eyebrow">BIN</span>
+                <div class="overview-number" data-field="number"></div>
+              </div>
+              <span class="valid-badge">
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 6 9 17l-5-5" /></svg>
+                有效 BIN
+              </span>
+            </header>
+            <div class="cache-line">
+              <p class="cache-status">
+                <span class="cache-source" id="cache-source"></span>
+                <span>缓存于 <time id="cache-time"></time></span>
+              </p>
+              <button class="ghost-button" id="refresh" type="button" title="重新查询接口，消耗 1 次额度">
+                <span class="button-label">
+                  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8" />
+                    <path d="M21 3v5h-5" />
+                    <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16" />
+                    <path d="M8 16H3v5" />
+                  </svg>
+                  刷新
+                </span>
+                <span class="spinner" aria-hidden="true"></span>
+              </button>
+            </div>
+            <p class="form-message" id="cache-message" role="alert" hidden></p>
+            <dl class="facts">
+              <div><dt>卡组织</dt><dd data-field="scheme"></dd></div>
+              <div><dt>品牌</dt><dd data-field="brand"></dd></div>
+              <div><dt>类型</dt><dd data-field="type"></dd></div>
+              <div><dt>等级</dt><dd data-field="level"></dd></div>
+              <div>
+                <dt>结算货币</dt>
+                <dd data-field="currency"></dd>
+                <dd class="fact-note" id="currency-rate" hidden>汇率暂不可用</dd>
+              </div>
+              <div><dt>BIN 长度</dt><dd data-field="length"></dd></div>
+            </dl>
+            <div class="rates" id="rates" hidden>
+              <button class="rate-toggle" id="rate-toggle" type="button" aria-expanded="false" aria-controls="rate-panel">
+                <span class="rate-summary" id="rate-summary"></span>
+                <span class="rate-more">
+                  <span class="rate-more-label">全部汇率</span>
+                  <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+                </span>
+              </button>
+              <ul class="rate-grid" id="rate-panel" hidden></ul>
+            </div>
+            <div class="switches">
+              <div class="switch" id="switch-commercial">
+                <span class="switch-dot" aria-hidden="true"></span>
+                <span>商业卡</span>
+                <strong data-field="commercial"></strong>
+              </div>
+              <div class="switch" id="switch-prepaid">
+                <span class="switch-dot" aria-hidden="true"></span>
+                <span>预付卡</span>
+                <strong data-field="prepaid"></strong>
+              </div>
+            </div>
+            <p class="rate-source" id="rate-source" hidden>
+              参考汇率，<span id="rate-date"></span> 更新 ·
+              <a href="https://www.exchangerate-api.com" target="_blank" rel="noopener noreferrer">Rates By Exchange Rate API</a>
+            </p>
+          </article>
+
+          <article class="panel issuer">
+            <span class="eyebrow">发卡机构</span>
+            <h2 class="issuer-name" data-field="issuerName"></h2>
+            <ul class="contacts">
+              <li>
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M2 12h20" />
+                  <path d="M12 2a15 15 0 0 1 0 20 15 15 0 0 1 0-20" />
+                </svg>
+                <span class="contact-label">官网</span>
+                <span class="contact-value" id="issuer-website"></span>
+              </li>
+              <li>
+                <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z" />
+                </svg>
+                <span class="contact-label">电话</span>
+                <span class="contact-value" id="issuer-phone"></span>
+              </li>
+            </ul>
+          </article>
+
+          <article class="panel country">
+            <span class="eyebrow">发卡国家 / 地区</span>
+            <div class="country-head">
+              <span class="country-flag" data-field="flag" aria-hidden="true"></span>
+              <div class="country-names">
+                <h2 data-field="countryTitle"></h2>
+                <p data-field="countrySubtitle"></p>
+              </div>
+            </div>
+            <dl class="facts">
+              <div><dt>首都</dt><dd data-field="capital"></dd></div>
+              <div><dt>所属区域</dt><dd data-field="region"></dd></div>
+              <div><dt>语言</dt><dd data-field="language"></dd></div>
+              <div><dt>法定货币</dt><dd data-field="countryCurrency"></dd></div>
+              <div><dt>国际区号</dt><dd data-field="idd"></dd></div>
+              <div><dt>ISO 代码</dt><dd data-field="iso"></dd></div>
+            </dl>
+          </article>
+
+          <details class="panel raw">
+            <summary>
+              <span>原始 JSON</span>
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m6 9 6 6 6-6" /></svg>
+            </summary>
+            <pre id="raw-json" tabindex="0"></pre>
+          </details>
+        </section>
+      </main>
+
+      <section class="history" id="history" aria-labelledby="history-title" hidden>
+        <header class="history-head">
+          <h2 id="history-title">查询记录 <span id="history-count"></span></h2>
+          <button class="ghost-button" id="history-clear" type="button">清空</button>
+        </header>
+        <ul class="history-list" id="history-list"></ul>
+        <p class="history-note">记录保存在服务器，所有登录的人看到的都一样。点击记录直接读取缓存，不消耗接口额度。</p>
+      </section>
+    </div>
+  </body>
+</html>

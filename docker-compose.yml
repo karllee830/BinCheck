@@ -1,0 +1,25 @@
+services:
+  bincheck:
+    build: .
+    image: bincheck:latest
+    container_name: bincheck
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${HOST_PORT:-8080}:8080"
+    environment:
+      APP_PASSWORD: ${APP_PASSWORD:?Set APP_PASSWORD in .env}
+      RAPIDAPI_KEY: ${RAPIDAPI_KEY:?Set RAPIDAPI_KEY in .env}
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+    volumes:
+      - bincheck-data:/data
+    tmpfs:
+      - /tmp
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+volumes:
+  bincheck-data:
