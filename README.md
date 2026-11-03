@@ -36,6 +36,14 @@ docker build -t bincheck .
 docker run -d --name bincheck -p 8080:8080 -v bincheck-data:/data --env-file .env bincheck
 ```
 
+## Run the published image
+
+GitHub Actions publishes a `linux/amd64` image to the GitHub Container Registry on every push to `main` and on `v*` tags. You can also start it manually from the workflow page.
+
+```bash
+docker run -d --name bincheck -p 8080:8080 -v bincheck-data:/data --env-file .env ghcr.io/karllee830/bincheck:latest
+```
+
 ## Environment variables
 
 | Variable       | Required | Default | Description                                                        |
