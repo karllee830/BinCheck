@@ -61,7 +61,7 @@ The container exits at startup if a required variable is missing.
 
 The app keeps cached BIN data, query history, the last reported API quota, and login sessions in `/data/bincheck.db`. Both Docker commands above store it in the `bincheck-data` named volume, so it survives restarts and image upgrades.
 
-RapidAPI only reports the quota on BIN API responses, so the page shows the last known value. After the reported reset time, it shows a full quota until the next real lookup updates it.
+RapidAPI only reports the quota on BIN API responses, so the page shows the last known value, with the reset time on hover or tap. After the reported reset time, it shows a full quota until the next real lookup updates it.
 
 To use a host directory instead, replace the volume with a bind mount such as `./data:/data`. The directory must be writable by UID 1000, the user the container runs as.
 

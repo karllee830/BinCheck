@@ -479,9 +479,53 @@ a:hover {
 }
 
 .quota {
+  position: relative;
   display: grid;
   gap: 5px;
   min-width: 96px;
+  padding-block: 8px;
+  border-radius: 6px;
+  cursor: default;
+}
+
+.quota-tip {
+  position: absolute;
+  z-index: 10;
+  top: 100%;
+  right: 0;
+  display: grid;
+  gap: 2px;
+  padding: 9px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--panel-raised);
+  box-shadow: var(--shadow);
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-4px);
+  transition:
+    opacity 0.15s ease,
+    transform 0.15s ease,
+    visibility 0.15s;
+}
+
+.quota:hover .quota-tip,
+.quota:focus .quota-tip {
+  opacity: 1;
+  visibility: visible;
+  transform: none;
+}
+
+.quota-tip-title {
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.quota-tip-detail {
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .quota-text {

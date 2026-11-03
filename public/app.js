@@ -492,11 +492,14 @@ function renderQuota(quota) {
   $('quota-fill').style.setProperty('--fill', `${Math.min(100, ratio * 100).toFixed(1)}%`);
   element.classList.toggle('is-low', ratio <= LOW_QUOTA_RATIO);
   if (quota.estimated) {
-    element.title = '额度周期已重置，按满额显示，下次查询后更新为实际数字';
+    $('quota-tip-title').textContent = '额度周期已重置';
+    $('quota-tip-detail').textContent = '暂按满额显示，下次查询后更新';
   } else if (quota.resetSeconds) {
-    element.title = `剩余 ${quota.remaining} 次，${formatDuration(quota.resetSeconds)}后重置`;
+    $('quota-tip-title').textContent = `${formatTimestamp(Date.now() + quota.resetSeconds * 1000)} 重置`;
+    $('quota-tip-detail').textContent = `还有 ${formatDuration(quota.resetSeconds)}`;
   } else {
-    element.title = `剩余 ${quota.remaining} 次`;
+    $('quota-tip-title').textContent = '重置时间未知';
+    $('quota-tip-detail').textContent = '下次查询后更新';
   }
   element.hidden = false;
 }

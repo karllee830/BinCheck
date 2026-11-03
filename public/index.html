@@ -72,12 +72,16 @@
           <span>BIN Check</span>
         </div>
         <div class="topbar-actions">
-          <div class="quota" id="quota" hidden>
+          <div class="quota" id="quota" tabindex="0" aria-describedby="quota-tip" hidden>
             <div class="quota-text">
               <span class="quota-label">接口额度</span>
               <span class="quota-count" id="quota-count"></span>
             </div>
             <div class="quota-meter" aria-hidden="true"><span id="quota-fill"></span></div>
+            <div class="quota-tip" id="quota-tip" role="tooltip">
+              <span class="quota-tip-title" id="quota-tip-title"></span>
+              <span class="quota-tip-detail" id="quota-tip-detail"></span>
+            </div>
           </div>
           <button class="ghost-button" id="logout" type="button">
             <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
