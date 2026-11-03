@@ -10,7 +10,8 @@ The server has no third-party dependencies and stores its data in SQLite through
 - Shows the issuing bank, country, and card attributes after a lookup, with the real card scheme logo.
 - Shows the settlement currency's exchange rate with CNY in both directions, and expands to two-way rates against USD, HKD, JPY, EUR, and GBP. Rates are daily reference values that the server caches for 6 hours, and a lookup still succeeds if rates are unavailable.
 - Caches successful lookups on the server, showing when each was cached, with a refresh button to query again. Opening a cached BIN uses no RapidAPI requests, on any device.
-- Lists the most recent 100 BINs in a query history at the bottom of the page, shared by everyone who signs in.
+- Matches the cache on the exact digits entered. If the API answers an 8-digit input with a 6-digit BIN, the app remembers that link, so repeating either one uses no further requests.
+- Lists the most recent 100 BINs in a query history at the bottom of the page, shared by everyone who signs in. You can add a note to an entry or delete it.
 
 ## Run with Docker Compose
 
@@ -59,7 +60,7 @@ The container exits at startup if a required variable is missing.
 
 ## Data storage
 
-The app keeps cached BIN data, query history, the last reported API quota, and login sessions in `/data/bincheck.db`. Both Docker commands above store it in the `bincheck-data` named volume, so it survives restarts and image upgrades.
+The app keeps cached BIN data, query history, notes, the last reported API quota, and login sessions in `/data/bincheck.db`. Both Docker commands above store it in the `bincheck-data` named volume, so it survives restarts and image upgrades.
 
 RapidAPI only reports the quota on BIN API responses, so the page shows the last known value, with the reset time on hover or tap. After the reported reset time, it shows a full quota until the next real lookup updates it.
 

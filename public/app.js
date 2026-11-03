@@ -6,6 +6,7 @@ const $ = (id) => document.getElementById(id);
 const MAX_BIN_LENGTH = 8;
 const MIN_BIN_LENGTH = 6;
 const LOW_QUOTA_RATIO = 0.1;
+const NOTE_MAX_LENGTH = 200;
 const DEFAULT_SEARCH_HINT = '粘贴完整卡号时，只会保留前 8 位。';
 
 const LOOKUP_ERRORS = {
@@ -49,7 +50,11 @@ const passwordInput = $('password');
 
 let lookupController = null;
 let currentKey = null;
+let currentDigits = null;
+let editingKey = null;
+let noteDraft = '';
 let historyEntries = [];
+let historyTotal = 0;
 
 /* Decorative security-print pattern */
 
@@ -506,6 +511,7 @@ function renderQuota(quota) {
 
 function clearResults() {
   currentKey = null;
+  currentDigits = null;
   workspace.dataset.state = 'idle';
   results.hidden = true;
   results.classList.remove('is-entering');
@@ -513,8 +519,18 @@ function clearResults() {
   renderHistory();
 }
 
-function showResult({ key, bin, rate, cache }, digits) {
+function renderIssuerNote(note) {
+  $('issuer-note').textContent = note ?? '';
+  $('issuer-note').hidden = !note;
+}
+
+function showResult({ key, bin, note, rate, cache }, digits) {
   currentKey = key;
+  currentDigits = digits;
+  renderIssuerNote(note);
+  $('resolved-note').textContent =
+    digits === key ? '' : `接口按前 ${key.length} 位返回（${key}），已记住对应关系，再查 ${digits} 不消耗额度。`;
+  $('resolved-note').hidden = digits === key;
   renderCard(bin, digits);
   renderResults(bin, rate);
   const source = cache.hit ? 'cache' : 'live';
@@ -529,6 +545,64 @@ function showResult({ key, bin, rate, cache }, digits) {
 }
 
 /* Query history */
+
+const HISTORY_ICONS = {
+  note: ['M12 20h9', 'M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z'],
+  delete: ['M3 6h18', 'M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6', 'M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2'],
+};
+
+function historyAction(action, label) {
+  const namespace = 'http://www.w3.org/2000/svg';
+  const icon = document.createElementNS(namespace, 'svg');
+  icon.setAttribute('class', 'icon');
+  icon.setAttribute('viewBox', '0 0 24 24');
+  icon.setAttribute('aria-hidden', 'true');
+  for (const shape of HISTORY_ICONS[action]) {
+    const path = document.createElementNS(namespace, 'path');
+    path.setAttribute('d', shape);
+    icon.append(path);
+  }
+
+  const button = document.createElement('button');
+  button.type = 'button';
+  button.className = 'history-action';
+  button.dataset.action = action;
+  button.title = label;
+  button.setAttribute('aria-label', label);
+  button.append(icon);
+  return button;
+}
+
+function historyNoteEditor(entry) {
+  const form = document.createElement('form');
+  form.className = 'history-editor';
+  form.dataset.key = entry.key;
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.maxLength = NOTE_MAX_LENGTH;
+  input.value = noteDraft;
+  input.placeholder = '输入备注，留空则清除';
+  input.setAttribute('aria-label', `${entry.key} 的备注`);
+
+  const save = document.createElement('button');
+  save.type = 'submit';
+  save.className = 'history-editor-save';
+  save.textContent = '保存';
+
+  const cancel = document.createElement('button');
+  cancel.type = 'button';
+  cancel.className = 'ghost-button history-editor-cancel';
+  cancel.textContent = '取消';
+
+  const message = document.createElement('p');
+  message.className = 'form-message';
+  message.setAttribute('role', 'alert');
+  message.hidden = true;
+
+  form.append(input, save, cancel, message);
+  return form;
+}
 
 function historyRow(entry) {
   const scheme = schemeFromName(entry.scheme);
@@ -548,9 +622,19 @@ function historyRow(entry) {
   number.className = 'history-bin';
   number.textContent = entry.key;
 
+  const issuerName = document.createElement('span');
+  issuerName.className = 'history-issuer-name';
+  issuerName.textContent = entry.issuer || '未知发卡机构';
   const issuer = document.createElement('span');
   issuer.className = 'history-issuer';
-  issuer.textContent = entry.issuer || '未知发卡机构';
+  issuer.append(issuerName);
+  if (entry.note) {
+    const remark = document.createElement('span');
+    remark.className = 'remark';
+    remark.textContent = entry.note;
+    remark.title = entry.note;
+    issuer.append(remark);
+  }
 
   const region = document.createElement('span');
   region.className = 'history-region';
@@ -562,19 +646,32 @@ function historyRow(entry) {
   time.textContent = formatTimestamp(entry.viewedAt);
 
   button.append(mark, number, issuer, region, time);
+
+  const actions = document.createElement('div');
+  actions.className = 'history-actions';
+  actions.append(
+    historyAction('note', entry.note ? `编辑 ${entry.key} 的备注` : `给 ${entry.key} 添加备注`),
+    historyAction('delete', `删除 ${entry.key} 的记录`),
+  );
+
   const item = document.createElement('li');
-  item.append(button);
+  item.dataset.key = entry.key;
+  item.append(button, actions);
+  if (entry.key === editingKey) item.append(historyNoteEditor(entry));
   return item;
 }
 
-function renderHistory(total = historyEntries.length) {
+function renderHistory(total = historyTotal) {
   $('history').hidden = historyEntries.length === 0;
   $('history-count').textContent = String(total);
   $('history-list').replaceChildren(...historyEntries.map(historyRow));
+  $('history-list').querySelector('.history-editor input')?.focus();
 }
 
 function applyHistory({ entries, total, quota }) {
   historyEntries = entries;
+  historyTotal = total;
+  if (!entries.some((entry) => entry.key === editingKey)) editingKey = null;
   renderHistory(total);
   renderQuota(quota);
 }
@@ -738,16 +835,95 @@ $('rate-toggle').addEventListener('click', () => {
 });
 
 $('refresh').addEventListener('click', () => {
-  if (currentKey) lookup(currentKey, { refreshing: true });
+  if (currentDigits) lookup(currentDigits, { refreshing: true });
 });
 
+function closeNoteEditor() {
+  editingKey = null;
+  noteDraft = '';
+  renderHistory();
+}
+
+async function saveNote(form) {
+  const { key } = form.dataset;
+  const note = noteDraft;
+  const message = form.querySelector('.form-message');
+  try {
+    const response = await fetch(`/api/history/${key}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ note }),
+    });
+    if (response.status === 401) {
+      expireSession();
+      return;
+    }
+    if (!response.ok) {
+      setMessage(message, '备注保存失败，请稍后再试。');
+      return;
+    }
+    editingKey = null;
+    noteDraft = '';
+    applyHistory(await response.json());
+    if (key === currentKey) renderIssuerNote(note.trim());
+  } catch {
+    setMessage(message, '网络异常，备注没有保存。');
+  }
+}
+
+async function deleteHistoryEntry(key) {
+  if (!window.confirm(`删除 ${key} 的记录、备注和缓存吗？再次查询会重新消耗额度。`)) return;
+  try {
+    const response = await fetch(`/api/history/${key}`, { method: 'DELETE' });
+    if (response.status === 401) {
+      expireSession();
+    } else if (response.ok) {
+      if (key === currentKey) clearResults();
+      applyHistory(await response.json());
+    }
+  } catch {
+    // The row stays in the list, which shows nothing was deleted.
+  }
+}
+
 $('history-list').addEventListener('click', (event) => {
+  const action = event.target.closest('.history-action');
+  if (action) {
+    const { key } = action.closest('li').dataset;
+    if (action.dataset.action === 'delete') {
+      deleteHistoryEntry(key);
+    } else {
+      editingKey = key;
+      noteDraft = historyEntries.find((entry) => entry.key === key)?.note ?? '';
+      renderHistory();
+    }
+    return;
+  }
+
+  if (event.target.closest('.history-editor-cancel')) {
+    closeNoteEditor();
+    return;
+  }
+
   const row = event.target.closest('.history-row');
   if (!row) return;
   binInput.value = row.dataset.key;
   syncTypedScheme();
   lookup(row.dataset.key);
   window.scrollTo({ top: 0, behavior: 'smooth' });
+});
+
+$('history-list').addEventListener('input', (event) => {
+  if (event.target.closest('.history-editor')) noteDraft = event.target.value;
+});
+
+$('history-list').addEventListener('keydown', (event) => {
+  if (event.key === 'Escape' && event.target.closest('.history-editor')) closeNoteEditor();
+});
+
+$('history-list').addEventListener('submit', (event) => {
+  event.preventDefault();
+  saveNote(event.target);
 });
 
 $('history-clear').addEventListener('click', async () => {

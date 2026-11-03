@@ -189,6 +189,7 @@
               </button>
             </div>
             <p class="form-message" id="cache-message" role="alert" hidden></p>
+            <p class="resolved-note" id="resolved-note" hidden></p>
             <dl class="facts">
               <div><dt>卡组织</dt><dd data-field="scheme"></dd></div>
               <div><dt>品牌</dt><dd data-field="brand"></dd></div>
@@ -231,7 +232,10 @@
 
           <article class="panel issuer">
             <span class="eyebrow">发卡机构</span>
-            <h2 class="issuer-name" data-field="issuerName"></h2>
+            <div class="issuer-head">
+              <h2 class="issuer-name" data-field="issuerName"></h2>
+              <span class="remark" id="issuer-note" hidden></span>
+            </div>
             <ul class="contacts">
               <li>
                 <svg class="icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -287,7 +291,7 @@
           <button class="ghost-button" id="history-clear" type="button">清空</button>
         </header>
         <ul class="history-list" id="history-list"></ul>
-        <p class="history-note">记录保存在服务器，所有登录的人看到的都一样。点击记录直接读取缓存，不消耗接口额度。</p>
+        <p class="history-note">记录和备注保存在服务器，所有登录的人看到的都一样。点击记录直接读取缓存，不消耗接口额度。</p>
       </section>
     </div>
   </body>

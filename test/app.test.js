@@ -147,9 +147,69 @@ describe('BIN Check server', () => {
     assert.equal(second.rate.cny, 8);
     assert.equal(second.quota.remaining, 97);
 
-    const longer = await (await fetch(`${baseUrl}/api/bin/44859012`, { headers: { cookie } })).json();
-    assert.equal(longer.cache.hit, true);
     assert.equal(upstreamCalls.length, 1);
+  });
+
+  it('asks the API about a longer BIN once, then remembers what it resolved to', async () => {
+    const cookie = await sessionCookie();
+    await fetch(`${baseUrl}/api/bin/448590`, { headers: { cookie } });
+
+    const first = await (await fetch(`${baseUrl}/api/bin/44859012`, { headers: { cookie } })).json();
+    assert.equal(first.cache.hit, false);
+    assert.equal(first.key, '448590');
+    assert.equal(upstreamCalls.at(-1).url.endsWith('?bin=44859012'), true);
+    assert.equal(upstreamCalls.length, 2);
+
+    const second = await (await fetch(`${baseUrl}/api/bin/44859012`, { headers: { cookie } })).json();
+    assert.equal(second.cache.hit, true);
+    assert.equal(second.key, '448590');
+    assert.equal(upstreamCalls.length, 2);
+
+    const refreshed = await fetch(`${baseUrl}/api/bin/44859012?refresh=1`, { headers: { cookie } });
+    assert.equal(refreshed.status, 200);
+    assert.equal(upstreamCalls.at(-1).url.endsWith('?bin=44859012'), true);
+    assert.equal(upstreamCalls.length, 3);
+
+    const history = await (await fetch(`${baseUrl}/api/history`, { headers: { cookie } })).json();
+    assert.equal(history.total, 1);
+  });
+
+  it('saves notes and deletes single history entries for signed-in clients', async () => {
+    const patch = (key, body, headers = {}) =>
+      fetch(`${baseUrl}/api/history/${key}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', ...headers },
+        body: JSON.stringify(body),
+      });
+
+    assert.equal((await patch('448590', { note: 'x' })).status, 401);
+    assert.equal((await fetch(`${baseUrl}/api/history/448590`, { method: 'DELETE' })).status, 401);
+
+    const cookie = await sessionCookie();
+    await fetch(`${baseUrl}/api/bin/448590`, { headers: { cookie } });
+
+    const saved = await patch('448590', { note: '  corporate card  ' }, { cookie });
+    assert.equal(saved.status, 200);
+    assert.equal((await saved.json()).entries[0].note, 'corporate card');
+    const lookup = await (await fetch(`${baseUrl}/api/bin/448590`, { headers: { cookie } })).json();
+    assert.equal(lookup.note, 'corporate card');
+
+    assert.equal((await patch('448590', { note: 'x'.repeat(201) }, { cookie })).status, 400);
+    assert.equal((await patch('448590', { note: 5 }, { cookie })).status, 400);
+    assert.equal((await patch('999999', { note: 'x' }, { cookie })).status, 404);
+    assert.equal((await patch('abc', { note: 'x' }, { cookie })).status, 400);
+    const wrongType = await fetch(`${baseUrl}/api/history/448590`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'text/plain', cookie },
+      body: '{"note":"x"}',
+    });
+    assert.equal(wrongType.status, 415);
+
+    const removed = await fetch(`${baseUrl}/api/history/448590`, { method: 'DELETE', headers: { cookie } });
+    assert.equal((await removed.json()).total, 0);
+    const after = await (await fetch(`${baseUrl}/api/bin/448590`, { headers: { cookie } })).json();
+    assert.equal(after.cache.hit, false);
+    assert.equal(after.note, '');
   });
 
   it('calls the BIN API again on refresh', async () => {

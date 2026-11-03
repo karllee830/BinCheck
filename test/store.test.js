@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { describe, it } from 'node:test';
 
 import { createStore } from '../src/store.js';
@@ -27,20 +28,78 @@ describe('createStore', () => {
     second.close();
   });
 
-  it('reuses a shorter resolved BIN for longer inputs', () => {
+  it('matches BINs exactly, without borrowing a shorter entry', () => {
     const store = createStore(':memory:');
-    assert.equal(store.saveBin('44859012', bin(448590)).key, '448590');
-    assert.equal(store.findBin('44859099').key, '448590');
+    store.saveBin('448590', bin(448590));
     assert.equal(store.findBin('448590').key, '448590');
+    assert.equal(store.findBin('44859012'), null);
     assert.equal(store.findBin('448591'), null);
   });
 
-  it('prefers the most specific entry', () => {
+  it('remembers a longer input that resolved to a shorter BIN', () => {
     const store = createStore(':memory:');
-    store.saveBin('448590', bin(448590));
+    assert.equal(store.saveBin('44859012', bin(448590)).key, '448590');
+    assert.equal(store.findBin('44859012').key, '448590');
+    assert.equal(store.findBin('448590').key, '448590');
+    assert.equal(store.findBin('44859013'), null);
+    assert.equal(store.history().total, 1);
+  });
+
+  it('keeps a real longer BIN separate and drops its old alias', () => {
+    const store = createStore(':memory:');
+    store.saveBin('44859012', bin(448590));
     store.saveBin('44859012', bin(44859012));
     assert.equal(store.findBin('44859012').key, '44859012');
-    assert.equal(store.findBin('44859013').key, '448590');
+    assert.equal(store.findBin('448590').key, '448590');
+    assert.equal(store.history().total, 2);
+  });
+
+  it('keeps notes when a BIN is cached again and clears them on request', () => {
+    const store = createStore(':memory:');
+    store.saveBin('448590', bin(448590));
+    assert.equal(store.findBin('448590').note, '');
+    assert.equal(store.setBinNote('448590', 'corporate card'), true);
+    store.saveBin('448590', bin(448590));
+    assert.equal(store.findBin('448590').note, 'corporate card');
+    assert.equal(store.history().entries[0].note, 'corporate card');
+    assert.equal(store.setBinNote('448590', ''), true);
+    assert.equal(store.findBin('448590').note, '');
+    assert.equal(store.setBinNote('999999', 'missing'), false);
+  });
+
+  it('removes one BIN along with its aliases', () => {
+    const store = createStore(':memory:');
+    store.saveBin('44859012', bin(448590));
+    store.saveBin('411111', bin(411111));
+    store.removeBin('448590');
+    assert.equal(store.findBin('448590'), null);
+    assert.equal(store.findBin('44859012'), null);
+    assert.equal(store.findBin('411111').key, '411111');
+
+    store.saveBin('448590', bin(448590));
+    assert.equal(store.findBin('44859012'), null);
+  });
+
+  it('adds notes to a database created before they existed', (t) => {
+    const dir = mkdtempSync(join(tmpdir(), 'bincheck-'));
+    t.after(() => rmSync(dir, { recursive: true, force: true }));
+    const path = join(dir, 'old.db');
+
+    const old = new DatabaseSync(path);
+    old.exec(`CREATE TABLE bins (
+      key TEXT PRIMARY KEY, data TEXT NOT NULL, cached_at INTEGER NOT NULL, viewed_at INTEGER NOT NULL
+    )`);
+    old.prepare('INSERT INTO bins VALUES (?, ?, 1000, 1000)').run('448590', JSON.stringify(bin(448590)));
+    old.close();
+
+    const store = createStore(path);
+    assert.equal(store.findBin('448590').note, '');
+    assert.equal(store.setBinNote('448590', 'kept'), true);
+    store.close();
+
+    const reopened = createStore(path);
+    assert.equal(reopened.findBin('448590').note, 'kept');
+    reopened.close();
   });
 
   it('keeps one entry per BIN, most recently viewed first', () => {

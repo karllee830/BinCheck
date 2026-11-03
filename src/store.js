@@ -12,6 +12,10 @@ const SCHEMA = `
     viewed_at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS bins_viewed_at ON bins (viewed_at);
+  CREATE TABLE IF NOT EXISTS bin_aliases (
+    input TEXT PRIMARY KEY,
+    key TEXT NOT NULL
+  );
   CREATE TABLE IF NOT EXISTS sessions (
     id TEXT PRIMARY KEY,
     expires_at INTEGER NOT NULL
@@ -22,7 +26,8 @@ const SCHEMA = `
   );
 `;
 
-// The API can answer a longer input with a shorter BIN, so entries are keyed by what it resolved to.
+// The API can answer a longer input with a shorter BIN. That data is stored once under the shorter
+// BIN, and the input becomes an alias so repeating it needs no API request.
 function binKey(digits, bin) {
   const resolved = String(bin?.number ?? '');
   return resolved.length >= MIN_BIN_LENGTH && digits.startsWith(resolved) ? resolved : digits;
@@ -34,6 +39,7 @@ function toEntry(row) {
     bin: JSON.parse(row.data),
     cachedAt: new Date(row.cached_at).toISOString(),
     viewedAt: new Date(row.viewed_at).toISOString(),
+    note: row.note,
   };
 }
 
@@ -41,6 +47,10 @@ export function createStore(path) {
   const db = new DatabaseSync(path);
   db.exec('PRAGMA journal_mode = WAL');
   db.exec(SCHEMA);
+  const binColumns = db.prepare('PRAGMA table_info(bins)').all();
+  if (!binColumns.some((column) => column.name === 'note')) {
+    db.exec("ALTER TABLE bins ADD COLUMN note TEXT NOT NULL DEFAULT ''");
+  }
 
   const selectBin = db.prepare('SELECT * FROM bins WHERE key = ?');
   const upsertBin = db.prepare(`
@@ -52,6 +62,20 @@ export function createStore(path) {
   const selectHistory = db.prepare('SELECT * FROM bins ORDER BY viewed_at DESC, key LIMIT ?');
   const countBins = db.prepare('SELECT COUNT(*) AS total FROM bins');
   const deleteBins = db.prepare('DELETE FROM bins');
+  const deleteBin = db.prepare('DELETE FROM bins WHERE key = ?');
+  const updateNote = db.prepare('UPDATE bins SET note = ? WHERE key = ?');
+
+  const selectAliasedBin = db.prepare(`
+    SELECT bins.* FROM bin_aliases JOIN bins ON bins.key = bin_aliases.key
+    WHERE bin_aliases.input = ?
+  `);
+  const upsertAlias = db.prepare(`
+    INSERT INTO bin_aliases (input, key) VALUES (?, ?)
+    ON CONFLICT (input) DO UPDATE SET key = excluded.key
+  `);
+  const deleteAlias = db.prepare('DELETE FROM bin_aliases WHERE input = ?');
+  const deleteAliasesOf = db.prepare('DELETE FROM bin_aliases WHERE key = ?');
+  const deleteAliases = db.prepare('DELETE FROM bin_aliases');
 
   const insertSession = db.prepare('INSERT INTO sessions (id, expires_at) VALUES (?, ?)');
   const selectSession = db.prepare('SELECT expires_at FROM sessions WHERE id = ?');
@@ -66,16 +90,18 @@ export function createStore(path) {
 
   return {
     findBin(digits) {
-      for (let length = digits.length; length >= MIN_BIN_LENGTH; length -= 1) {
-        const row = selectBin.get(digits.slice(0, length));
-        if (row) return toEntry(row);
-      }
-      return null;
+      const row = selectBin.get(digits) ?? selectAliasedBin.get(digits);
+      return row ? toEntry(row) : null;
     },
 
     saveBin(digits, bin, now = Date.now()) {
       const key = binKey(digits, bin);
       upsertBin.run(key, JSON.stringify(bin), now, now);
+      if (key === digits) {
+        deleteAlias.run(digits);
+      } else {
+        upsertAlias.run(digits, key);
+      }
       return toEntry(selectBin.get(key));
     },
 
@@ -90,7 +116,17 @@ export function createStore(path) {
       };
     },
 
+    setBinNote(key, note) {
+      return updateNote.run(note, key).changes > 0;
+    },
+
+    removeBin(key) {
+      deleteAliasesOf.run(key);
+      deleteBin.run(key);
+    },
+
     clearHistory() {
+      deleteAliases.run();
       deleteBins.run();
     },
 

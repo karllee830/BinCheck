@@ -19,6 +19,7 @@ const LOGIN_WINDOW_MS = 10 * 60 * 1000;
 const LOGIN_MAX_TRACKED_CLIENTS = 10_000;
 
 const BIN_PATTERN = /^\d{6,8}$/;
+const NOTE_MAX_LENGTH = 200;
 
 const STATIC_FILES = {
   '/': ['index.html', 'text/html; charset=utf-8'],
@@ -112,7 +113,7 @@ function parseQuota(headers) {
   return { limit, remaining, resetSeconds: number('x-ratelimit-requests-reset') };
 }
 
-function historySummary({ key, bin, viewedAt }) {
+function historySummary({ key, bin, viewedAt, note }) {
   return {
     key,
     scheme: bin.scheme ?? '',
@@ -120,6 +121,7 @@ function historySummary({ key, bin, viewedAt }) {
     flag: bin.country?.flag ?? '',
     alpha2: bin.country?.alpha2 ?? '',
     viewedAt,
+    note,
   };
 }
 
@@ -234,6 +236,7 @@ export function createApp({ password, apiKey, store, trustProxy = false, fetchIm
     sendJson(res, 200, {
       key: entry.key,
       bin: entry.bin,
+      note: entry.note,
       quota,
       rate: await rates.ratesFor(entry.bin.currency),
       cache: { hit: fromCache, cachedAt: entry.cachedAt },
@@ -290,6 +293,43 @@ export function createApp({ password, apiKey, store, trustProxy = false, fetchIm
     }
   }
 
+  function sendHistory(res) {
+    const { entries, total } = store.history();
+    sendJson(res, 200, {
+      entries: entries.map(historySummary),
+      total,
+      quota: store.loadQuota(),
+    });
+  }
+
+  async function handleNote(req, res, key) {
+    if (!req.headers['content-type']?.startsWith('application/json')) {
+      sendError(res, 415, 'unsupported_media_type');
+      return;
+    }
+
+    let note;
+    try {
+      note = JSON.parse(await readBody(req))?.note;
+    } catch {
+      sendError(res, 400, 'bad_request');
+      return;
+    }
+    if (typeof note !== 'string') {
+      sendError(res, 400, 'bad_request');
+      return;
+    }
+
+    const trimmed = note.trim();
+    if (trimmed.length > NOTE_MAX_LENGTH) {
+      sendError(res, 400, 'note_too_long');
+    } else if (store.setBinNote(key, trimmed)) {
+      sendHistory(res);
+    } else {
+      sendError(res, 404, 'not_found');
+    }
+  }
+
   function serveStatic(req, res, pathname) {
     const file = staticFiles.get(pathname);
     if (!file) {
@@ -331,12 +371,21 @@ export function createApp({ password, apiKey, store, trustProxy = false, fetchIm
         return;
       }
       if (method === 'DELETE') store.clearHistory();
-      const { entries, total } = store.history();
-      sendJson(res, 200, {
-        entries: entries.map(historySummary),
-        total,
-        quota: store.loadQuota(),
-      });
+      sendHistory(res);
+    } else if (pathname.startsWith('/api/history/') && (method === 'PATCH' || method === 'DELETE')) {
+      if (!isAuthenticated(req)) {
+        sendError(res, 401, 'unauthorized');
+        return;
+      }
+      const key = pathname.slice('/api/history/'.length);
+      if (!BIN_PATTERN.test(key)) {
+        sendError(res, 400, 'invalid_bin');
+      } else if (method === 'PATCH') {
+        await handleNote(req, res, key);
+      } else {
+        store.removeBin(key);
+        sendHistory(res);
+      }
     } else if (pathname.startsWith('/api/')) {
       sendError(res, 404, 'not_found');
     } else if (isRead) {
